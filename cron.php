@@ -31,8 +31,6 @@ function wp_mailscanner_read_mail(){
 
             $tool_email->connect($server, $port, $folder_read, $user, $pass);
 
-echo "<pre>";print_R($tool_email);die;
-
             $emails = $tool_email->get_emails();
                         
             $content_emails = $tool_email->get_content_emails($emails);
@@ -53,44 +51,47 @@ echo "<pre>";print_R($tool_email);die;
                         $from_host = $values["from_host"];
                         $MailDate = $values["MailDate"];
 
+                        $create_post = true;
 
                         if(!$process_all_email){
                             if(!in_array($from_host, $hosts)){
-                                continue;
+                                $create_post = false;
                             }
                         }
+                        
+                        if($create_post){
+                            $data_post = array("title"=>$title, "body"=>$body, "MailDate"=>$MailDate);
 
-                        $data_post = array("title"=>$title, "body"=>$body, "MailDate"=>$MailDate);
+                            $tool_post = new Wp_mailscanner_post;
+                            $post_id = $tool_post->insert_post($data_post,$from_host);
 
-                        $tool_post = new Wp_mailscanner_post;
-                        $post_id = $tool_post->insert_post($data_post,$from_host);
+                            if($post_id > 0){
 
-                        if($post_id > 0){
+                                // Sposto la mail per indicare che è stata processata correttamente
+                                $tool_email->move($email_number, $folder_processed);
 
-                            // Sposto la mail per indicare che è stata processata correttamente
-                            $tool_email->move($email_number, $folder_processed);
+                                $posts[$x]["id"] = $post_id;
+                                $posts[$x]["email_number"] = $email_number;
 
-                            $posts[$x]["id"] = $post_id;
-                            $posts[$x]["email_number"] = $email_number;
-                            
-                            $y = 0;
-                            foreach($attachments as $file_name){
-                                
-                                $attachment = $tool_post->insert_attachment($post_id, $tool_email->folder_attachments, $file_name);
-                                
-                                if($attachment["id"] > 0){
-                                    $file_url = $attachment["url"];
-                                    
-                                    $tool_post->update_post($post_id,$file_url,$file_name);
+                                $y = 0;
+                                foreach($attachments as $file_name){
 
-                                    $posts[$x]["attachments"][$y]["id"] = $attachment["id"];
-                                    $posts[$x]["attachments"][$y]["url"] = $file_url;
+                                    $attachment = $tool_post->insert_attachment($post_id, $tool_email->folder_attachments, $file_name);
 
-                                    $y++;
+                                    if($attachment["id"] > 0){
+                                        $file_url = $attachment["url"];
+
+                                        $tool_post->update_post($post_id,$file_url,$file_name);
+
+                                        $posts[$x]["attachments"][$y]["id"] = $attachment["id"];
+                                        $posts[$x]["attachments"][$y]["url"] = $file_url;
+
+                                        $y++;
+                                    }
                                 }
-                            }
 
-                            $x++;
+                                $x++;
+                            }
                         }
                     }
                 }
